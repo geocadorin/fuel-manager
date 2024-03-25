@@ -20,5 +20,7 @@ namespace fuel_manager.Models
         public int anoModelo { get; set; }
         public ICollection<Consumo> Consumos { get; set; }
 
+        public ICollection<VeiculoUsuarios> Usuarios { get; set; }
+
     }
 }
