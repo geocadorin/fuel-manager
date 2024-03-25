@@ -1,11 +1,18 @@
 ﻿using BCrypt.Net;
 using fuel_manager.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 
 namespace fuel_manager.Controllers
 {
+    //[Authorize(Roles = "Administrador")]
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class UsuariosController : ControllerBase
@@ -52,6 +59,7 @@ namespace fuel_manager.Controllers
         }
 
         [HttpPut]
+        [AllowAnonymous]
         public async Task<ActionResult> Update(UsuarioDto model)
         {
             var modeloDb = await _context.Usuarios.AsNoTracking().FirstOrDefaultAsync(c => c.Id == model.Id);
@@ -81,6 +89,41 @@ namespace fuel_manager.Controllers
             model.Links.Add(new LinkDto(model.Id, Url.ActionLink(), "self", "GET"));
             model.Links.Add(new LinkDto(model.Id, Url.ActionLink(), "update", "PUT"));
             model.Links.Add(new LinkDto(model.Id, Url.ActionLink(), "delete", "Delete"));
+        }
+
+        [AllowAnonymous]
+        [HttpPost("authenticate")]
+        public async Task<ActionResult> Authenticate(AuthenticateDto model)
+        {
+            var usuarioDb = await _context.Usuarios.FindAsync(model.Id);
+
+            if (usuarioDb == null || !BCrypt.Net.BCrypt.Verify(model.Password, usuarioDb.Password))
+                return Unauthorized();
+
+            var jwt = GenerateJwtToken(usuarioDb);
+
+            return Ok(new { jwtToken = jwt });
+        }
+
+        private string GenerateJwtToken(Usuario model)
+        {
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var key = Encoding.ASCII.GetBytes("Ry74cBQva5dThwbwchR9jhbtRFnJxWSZ");
+            var claims = new ClaimsIdentity(new Claim[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, model.Id.ToString()),
+                new Claim(ClaimTypes.Role, model.Perfil.ToString())
+            });
+
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = claims,
+                Expires = DateTime.UtcNow.AddHours(8),
+                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key),
+                SecurityAlgorithms.HmacSha256Signature)
+            };
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+            return tokenHandler.WriteToken(token);
         }
     }
 }
